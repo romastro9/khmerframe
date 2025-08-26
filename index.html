@@ -15,37 +15,17 @@
   .panel { background:white; border-radius:10px; padding:20px; box-shadow:0 2px 6px rgba(0,0,0,0.15); }
   .panel h2 { margin-top:0; color:#1877F2; }
   input[type=file] { display:block; margin:10px 0; width:100%; }
-  canvas { width:100%; max-width:100%; height:auto; border-radius:10px; border:1px solid #ccc; background:#fff; cursor:grab; }
 
-  .controls { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; align-items:center; }
-  .controls button, .controls input[type=range] { cursor:pointer; flex:1; min-width:80px; }
+  #previewImg {
+    width:100%; 
+    max-width:100%;
+    border-radius:10px;
+    border:1px solid #ccc;
+    background:#fff;
+  }
 
   footer { text-align:center; margin:30px 10px; font-size:0.9rem; color:#555; }
   footer a { color:#1877F2; text-decoration:none; margin-left:5px; }
-
-  /* Floating Save Button (mobile long press) */
-  #saveBtnMobile {
-    display:none;
-    position:absolute;
-    bottom:20px;
-    right:20px;
-    background:#1877F2;
-    color:white;
-    padding:12px 20px;
-    border:none;
-    border-radius:50px;
-    font-size:1rem;
-    font-weight:bold;
-    cursor:pointer;
-    box-shadow:0 4px 8px rgba(0,0,0,0.2);
-    z-index:1500;
-  }
-
-  /* Modal */
-  .modal { display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.5); padding:20px; }
-  .modal-content { background:white; margin:10% auto; padding:20px; border-radius:10px; width:90%; max-width:400px; text-align:center; }
-  .close-btn { margin-top:15px; padding:8px 15px; cursor:pointer; border:none; background:#1877F2; color:white; border-radius:5px; font-weight:bold; }
-  .modal img { width:150px; margin:10px auto; display:block; }
 
   @media (max-width:768px){ main{grid-template-columns:1fr;} }
 </style>
@@ -63,17 +43,11 @@
     <input type="file" id="photoInput" accept="image/*">
     <label id="frameLabel">Frame PNG (optional):</label>
     <input type="file" id="frameInput" accept="image/*">
-    <div class="controls">
-      <label>Zoom:</label>
-      <input type="range" id="zoomRange" min="1" max="3" step="0.01" value="1">
-      <button id="resetBtn">Reset</button>
-      <button id="downloadBtn">Download</button>
-    </div>
   </div>
-  <div class="panel" style="position:relative;">
+  <div class="panel">
     <h2>Preview</h2>
-    <canvas id="canvas" width="1080" height="1080"></canvas>
-    <button id="saveBtnMobile">💾 Save</button>
+    <!-- show final merged image -->
+    <img id="previewImg" alt="Preview">
   </div>
 </main>
 
@@ -83,99 +57,62 @@
   <a href="https://t.me/Romastro9" target="_blank"><i class="fab fa-telegram"></i> Telegram</a>
 </footer>
 
-<div id="modal" class="modal">
-  <div class="modal-content">
-    <p id="modalText">រូបភាពរបស់អ្នកត្រូវបានរៀបចំរួចរាល់!</p>
-    <img src="image/photo_2025-03-20_03-49-02.jpg" alt="KHQR Logo">
-    <p>ប៉ាវកាហ្វេអ្នកផលិត</p>
-    <button class="close-btn" id="closeModal">Close</button>
-  </div>
-</div>
-
 <script>
 let lang='en';
 const text={
-  en:{uploadPhoto:'Photo (required):', uploadFrame:'Frame PNG (optional):', download:'Download', reset:'Reset', panel:'Upload Images', langBtn:'ភាសាខ្មែរ', modal:'Your image is ready!'},
-  kh:{uploadPhoto:'រូបភាព (ចាំបាច់):', uploadFrame:'ស៊ុម PNG (បន្ថែម):', download:'ទាញយក', reset:'កំណត់ឡើងវិញ', panel:'អាប់ឡូដរូបភាព', langBtn:'English', modal:'រូបភាពរបស់អ្នកត្រូវបានរៀបចំរួចរាល់!'}
+  en:{uploadPhoto:'Photo (required):', uploadFrame:'Frame PNG (optional):', panel:'Upload Images', langBtn:'ភាសាខ្មែរ'},
+  kh:{uploadPhoto:'រូបភាព (ចាំបាច់):', uploadFrame:'ស៊ុម PNG (បន្ថែម):', panel:'អាប់ឡូដរូបភាព', langBtn:'English'}
 };
 const langBtn=document.getElementById('langBtn');
 const photoLabel=document.getElementById('photoLabel');
 const frameLabel=document.getElementById('frameLabel');
-const downloadBtn=document.getElementById('downloadBtn');
-const resetBtn=document.getElementById('resetBtn');
 const panelTitle=document.getElementById('panelTitle');
-const modal=document.getElementById('modal');
-const closeModal=document.getElementById('closeModal');
-const modalText=document.getElementById('modalText');
-const saveBtnMobile=document.getElementById('saveBtnMobile');
 
 langBtn.addEventListener('click',()=>{
   lang=lang==='en'?'kh':'en';
   photoLabel.textContent=text[lang].uploadPhoto;
   frameLabel.textContent=text[lang].uploadFrame;
-  downloadBtn.textContent=text[lang].download;
-  resetBtn.textContent=text[lang].reset;
   panelTitle.textContent=text[lang].panel;
-  modalText.textContent=text[lang].modal;
   langBtn.textContent=text[lang].langBtn;
 });
-closeModal.addEventListener('click',()=>{modal.style.display='none';});
 
-const canvas=document.getElementById('canvas');
-const ctx=canvas.getContext('2d');
 const photoInput=document.getElementById('photoInput');
 const frameInput=document.getElementById('frameInput');
-const zoomRange=document.getElementById('zoomRange');
-let photoImg=null, frameImg=null;
-let zoom=1, offsetX=0, offsetY=0, isDragging=false, startX=0, startY=0;
+const previewImg=document.getElementById('previewImg');
 
-function drawCanvas(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  if(photoImg){
-    const cw=canvas.width,ch=canvas.height;
-    const pw=photoImg.width,ph=photoImg.height;
-    const scale=Math.max(cw/pw,ch/ph)*zoom;
-    const dw=pw*scale,dh=ph*scale;
-    const dx=(cw-dw)/2+offsetX,dy=(ch-dh)/2+offsetY;
-    ctx.drawImage(photoImg,dx,dy,dw,dh);
-  }
-  if(frameImg) ctx.drawImage(frameImg,0,0,canvas.width,canvas.height);
+let photoImg=null, frameImg=null;
+
+function mergeImages(){
+  if(!photoImg) return;
+  const canvas=document.createElement('canvas');
+  const size=1080;
+  canvas.width=size; canvas.height=size;
+  const ctx=canvas.getContext('2d');
+
+  const scale=Math.max(size/photoImg.width, size/photoImg.height);
+  const dw=photoImg.width*scale, dh=photoImg.height*scale;
+  const dx=(size-dw)/2, dy=(size-dh)/2;
+  ctx.drawImage(photoImg,dx,dy,dw,dh);
+  if(frameImg) ctx.drawImage(frameImg,0,0,size,size);
+
+  previewImg.src=canvas.toDataURL('image/png');
 }
+
 photoInput.addEventListener('change',e=>{
   const file=e.target.files[0];
-  if(file){photoImg=new Image(); photoImg.src=URL.createObjectURL(file); photoImg.onload=drawCanvas;}
+  if(file){
+    photoImg=new Image();
+    photoImg.src=URL.createObjectURL(file);
+    photoImg.onload=mergeImages;
+  }
 });
 frameInput.addEventListener('change',e=>{
   const file=e.target.files[0];
-  if(file){frameImg=new Image(); frameImg.src=URL.createObjectURL(file); frameImg.onload=drawCanvas;}
-});
-zoomRange.addEventListener('input', e=>{zoom=parseFloat(e.target.value); drawCanvas();});
-canvas.addEventListener('mousedown', e=>{isDragging=true; startX=e.offsetX; startY=e.offsetY; canvas.style.cursor='grabbing';});
-canvas.addEventListener('mousemove', e=>{if(isDragging){offsetX+=e.offsetX-startX; offsetY+=e.offsetY-startY; startX=e.offsetX; startY=e.offsetY; drawCanvas();}});
-canvas.addEventListener('mouseup', ()=>{isDragging=false; canvas.style.cursor='grab';});
-canvas.addEventListener('mouseleave',()=>{isDragging=false; canvas.style.cursor='grab';});
-resetBtn.addEventListener('click', ()=>{zoom=1; offsetX=0; offsetY=0; zoomRange.value=1; drawCanvas();});
-downloadBtn.addEventListener('click', ()=>{
-  if(!photoImg){alert('Upload photo first!'); return;}
-  const link=document.createElement('a');
-  link.download='khmer_frame.png';
-  link.href=canvas.toDataURL();
-  link.click();
-  modal.style.display='block';
-});
-
-/* Mobile long press show Save button */
-let pressTimer;
-canvas.addEventListener('touchstart',()=>{
-  pressTimer=setTimeout(()=>{saveBtnMobile.style.display='block';},600);
-});
-canvas.addEventListener('touchend',()=>{clearTimeout(pressTimer);});
-saveBtnMobile.addEventListener('click',()=>{
-  const link=document.createElement('a');
-  link.download='khmer_frame.png';
-  link.href=canvas.toDataURL();
-  link.click();
-  saveBtnMobile.style.display='none';
+  if(file){
+    frameImg=new Image();
+    frameImg.src=URL.createObjectURL(file);
+    frameImg.onload=mergeImages;
+  }
 });
 </script>
 </body>
